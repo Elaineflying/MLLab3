@@ -1,0 +1,227 @@
+---
+title: "Machine Learning Lab 3"
+author: "Xuan Wang, Priyarani Patil, Lepeng Zhang"
+date: "2023-12-17"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Statement of Contribution     
+
+The group report was made based on the discussion after all of us had finished all three assignments. Assignment 1 was mainly contributed by Lepeng Zhang. Assignment 2 was mainly contributed by Priyarani Patil. Assignment 3 was mainly contributed by Xuan Wang.  
+
+# Assignment 1. KERNEL METHODS                      
+```{r, Assignment1_1, echo = FALSE}
+set.seed(1234567890)
+library(geosphere)
+stations <- read.csv("stations.csv", fileEncoding = "latin1")
+temps <- read.csv("temps50k.csv")
+st <- merge(stations,temps,by="station_number")
+
+gau_kernel <- function(dist_h, h) {
+  exp(-(dist_h^2) / (2 * h^2))
+}
+
+a <- 58.4274 
+b <- 14.826    
+interest_date <- "2013-11-04" 
+interest_time <- c("04:00:00","06:00:00","08:00:00","10:00:00","12:00:00","14:00:00","16:00:00","18:00:00","20:00:00","22:00:00","24:00:00")
+h_distance <- 300000
+h_date <- 6000
+h_time <- 4
+
+# plot the kernel value as a function of distance
+par(mfrow=c(1,3))
+# Plot 1: Physical Distance    
+dist_physical <- distHaversine(cbind(st$longitude, st$latitude), c(b, a))
+plot(dist_physical, gau_kernel(dist_physical,h_distance), xlab="Physical Distance", ylab="Value", main="Origin: as template")   
+# Plot 2: Day Distance
+dist_date <- as.numeric(as.Date(st$date) - as.Date(interest_date))
+plot(dist_date, gau_kernel(dist_date,h_date), xlab="Day Distance", ylab="Value", main="Origin: as template")    
+# Plot 3: Time Distance
+dist_time <- as.numeric(as.POSIXct(st$time, format="%H:%M:%S")-as.POSIXct(interest_time[5], format="%H:%M:%S"))/60^2
+plot(dist_time, gau_kernel(dist_time,h_time), xlab="Time Distance", ylab="Value", main="Origin: 12:00:00")
+
+
+temp_add <- vector(length=length(interest_time))
+temp_mul <- vector(length=length(interest_time))
+
+for (i in seq_along(interest_time)) {
+  st$datetime <- as.POSIXct(paste(st$date, st$time), format="%Y-%m-%d %H:%M:%S")
+  interest_datetime <- as.POSIXct(paste(interest_date, interest_time[i]), format="%Y-%m-%d %H:%M:%S")
+  subset_data <- subset(st, st$datetime <= interest_datetime)
+  
+  dist_physical <- distHaversine(cbind(subset_data$longitude, subset_data$latitude), c(b, a))
+  dist_date <- as.numeric(as.Date(subset_data$date) - as.Date(interest_date))
+  dist_time <- as.numeric(as.POSIXct(subset_data$time, format="%H:%M:%S")-as.POSIXct(interest_time[i], format="%H:%M:%S"))/60^2
+
+  kernel_values_add <- gau_kernel(dist_physical, h_distance) + gau_kernel(dist_date, h_date) + gau_kernel(dist_time, h_time)
+  kernel_values_mul <- gau_kernel(dist_physical, h_distance) * gau_kernel(dist_date, h_date) * gau_kernel(dist_time, h_time)
+
+  temp_add[i] <- sum(subset_data$air_temperature * kernel_values_add) / sum(kernel_values_add)
+  temp_mul[i] <- sum(subset_data$air_temperature * kernel_values_mul) / sum(kernel_values_mul)
+}
+
+cat("Temp (the kernel is the sum of three Gaussian kernels):\n")
+temp_add
+cat("Temp (the kernel is the product of three Gaussian kernels):\n")
+temp_mul
+
+par(mfrow=c(1,1))
+x_label <- seq(4,24,by=2)
+plot(temp_add, type="o", col="blue", pch=16, ylim=range(c(temp_add, temp_mul)), xlab="Time", ylab="Temperature", main="Temperature Comparison", xaxt="n")
+lines(temp_mul, type="o", col="green", pch=16)
+axis(1, at = seq_along(x_label), labels = x_label, )
+legend("topright", legend=c("Summation", "Product"), col=c("blue", "green"), lty=1, pch=16)
+```
+
+The comparison graph shows that the temp values computed by the summation of kernel values stay in a relatively narrow range over the interested time period compared with their counterparts which are computed by the product of kernel values.         
+By checking the ranges of kernel values obtained by summation and product, it can be found that the ratio of maximum and minimum of summation kernel values is 2.94 (2.997843/1.018752), while this value of product kernel values is 5292.28 (0.9978443/0.0001885472) (the specific value can be changed with different interested hour and h values). This indicates that for product situation, the sample point which is close to the interested point contributes significantly to the final result and the remote sample point contributes very little. The contribution gap is huge. While for summation situation, this contribution gap is relatively small. No matter a sample point is close or far away from the interested point, it contributes a certain extent to the final result. Based on this, we believe that the product kernel value is preferred in this task since the weather can change a lot even within a short period or a small region. In this sense, the weather data obtained far away from the interested place and time has no much value for forecast while the data obtained closely contributes significantly.  
+
+# Assignment 2. SUPPORT VECTOR MACHINES     
+### (1)  
+All these four filters are set the parameter **C** to the value that leads to the minimal validation error. While, this batch of validation errors are obtained based on **tr** training set and **va** validation set. So to achieve the minimal validation error for the model, the filter should be trained with **tr** as well. That's why **filter0** and **filter1** would be my choices for users.    
+### (2)     
+err1. Generalization error means error on unseen data. In the two filter models mentioned above, only **filter1** is used to obtain the error on a separate test set.  
+### (3)         
+The equation for computing the decision value $k_i$ is given as:    
+$$k_i=\sum_{j=1}^{n}\theta_je^{-\sigma\left \| x_j-x_i  \right \|^2}-b$$
+where,  
+$n$ is the number of support vectors;  
+$\theta_j$ is the coefficient of $j^{th}$ support vector;  
+$\sigma$ is the hyperparameter set to 0.05 here;   
+$x_j$ is the $j^{th}$ support vector;  
+$x_i$ is the $i^{th}$ desired point;  
+$b$ is the intercept of the linear combination.
+
+```{r, Assignment2_1, echo = FALSE}
+filter3 <- ksvm(type~.,data=spam,kernel="rbfdot",kpar=list(sigma=0.05),C=which.min(err_va)*by,scaled=FALSE)
+
+sv <- alphaindex(filter3)[[1]]
+co <- coef(filter3)[[1]]
+inte <- -b(filter3)
+k<-NULL
+for(i in 1:10){ 
+  k2<-NULL
+  for(j in 1:length(sv)){
+    dis <- spam[sv[j],-58] - spam[i,-58]
+    exp_value <- exp(-0.05*sum(dis^2))
+    k2 <- c(k2, exp_value)  
+  }
+  k<-c(k, sum(co*k2)+inte)
+}
+
+cat("Results from linear combination:\n")
+k
+real_value <- predict(filter3,spam[1:10,-58], type = "decision")
+
+plot(real_value, xlab = "Index", ylab = "Value", main = "Result Comparison", type = "l", col = "blue")
+points(k, col = "green", pch = 16)
+legend("topright", legend = c("By function (Line)", "By linear combination"), col = c("blue", "green"), pch = c(NA,16),lty = c(1, NA),  bg = "transparent", box.lwd = 0, box.lty = 0)
+```
+The graph above shows that the decision values obtained by linear combination (green points) and function **predict** (blue line) are almost the same.   
+
+
+# Assignment 3. NEURAL NETWORKS   
+### (1)     
+```{r, Assignment3_1, echo = FALSE}
+library(neuralnet)
+set.seed(1234567890)
+
+Var <- runif(500, 0, 10)
+mydata <- data.frame(Var, Sin=sin(Var))
+tr <- mydata[1:25,] # Training
+te <- mydata[26:500,] # Test
+
+# Random initialization of the weights in the interval [-1, 1]
+winit <- runif(2*10+11, -1, 1) 
+nn <- neuralnet(Sin ~ Var, data = tr, hidden = c(10),  startweights = winit)
+# Plot of the training data (black), test data (blue), and predictions (red)
+plot(tr, cex=2, main="act.fct: Sigmoid")   
+points(te, col = "blue", cex=1)
+points(te[,1],predict(nn,te), col="red", cex=1)
+```
+The deviance in the range from 5 to 7 is relatively larger than other part where fits well.     
+
+### (2)      
+```{r, Assignment3_2, echo = FALSE}
+h1 <- function(x) x
+h2 <- function(x) ifelse(x>0,x,0)
+h3 <- function(x) log(1+exp(x))
+
+nn_linear <- neuralnet(Sin ~ Var, data = tr, hidden = c(10),  startweights = winit, act.fct = h1)
+nn_relu <- neuralnet(Sin ~ Var, data = tr, hidden = c(10),  startweights = winit, act.fct = h2)
+nn_softplus <- neuralnet(Sin ~ Var, data = tr, hidden = c(10),  startweights = winit, act.fct = h3)
+
+par(mfrow=c(2,2))   
+plot(tr, cex=2, main="act.fct: Sigmoid")   
+points(te, col = "blue", cex=1)
+points(te[,1],predict(nn,te), col="red", cex=1)
+
+plot(tr, cex=2, main="act.fct: Linear")   
+points(te, col = "blue", cex=1)
+points(te[,1],predict(nn_linear,te), col="red", cex=1)
+
+plot(tr, cex=2, main="act.fct: ReLU")   
+points(te, col = "blue", cex=1)
+points(te[,1],predict(nn_relu,te), col="red", cex=1)
+
+plot(tr, cex=2, main="act.fct: Softplus")   
+points(te, col = "blue", cex=1)
+points(te[,1],predict(nn_softplus,te), col="red", cex=1)
+
+par(mfrow=c(1,1))   
+```
+
+
+
+### (3)        
+```{r, Assignment3_3, echo = FALSE}
+set.seed(1234567890)
+
+Var <- runif(500, 0, 50)
+te <- data.frame(Var, Sin=sin(Var))
+
+plot(tr,cex=2,main="act.fct: Sigmoid",xlim=c(min(Var)-1,max(Var)+1),ylim=c(-12,1))
+points(te, col = "blue", cex=1)
+points(te[,1],predict(nn,te), col="red", cex=1)
+```
+The model fits well in the interval [0,10]. Beyond 10, the prediction decreases gradually and converges to a certain value. In one word, it doesn't perform well on data outside the training range.             
+
+### (4)     
+```{r, Assignment3_4, echo = FALSE}
+cat("Weights of nn model:\n")
+nn$weights  
+```
+
+### (5)     
+```{r, Assignment3_5, echo = FALSE}
+nn <- neuralnet(Var ~ Sin, data = mydata, hidden = c(10),  startweights = winit, threshold = 0.1)
+
+plot(mydata, cex=1, main="act.fct: Sigmoid")   
+points(predict(nn,mydata),mydata[,2], col="red", cex=1)
+```
+
+
+
+
+# Appendix                      
+## Code for Assignment 1                
+```{r ref.label=c('Assignment1_1'), echo=TRUE, eval=FALSE}
+
+```
+
+## Code for Assignment 2                             
+```{r ref.label=c('Assignment2_1'), echo=TRUE, eval=FALSE}
+
+```
+
+## Code for Assignment 3                         
+```{r ref.label=c('Assignment3_1, Assignment3_2, Assignment3_3, Assignment3_4, Assignment3_5'), echo=TRUE, eval=FALSE}
+
+```

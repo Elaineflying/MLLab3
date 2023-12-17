@@ -20,7 +20,7 @@ times <- seq(from = as.POSIXct("04:00:00", format = "%H:%M:%S"),
 # Define parameters
 h_distance <- 500000  # Smoothing coefficient for physical distance
 h_date <- 8000      # Smoothing coefficient for date difference
-h_time <- 4       # Smoothing coefficient for time difference
+h_time <- 12       # Smoothing coefficient for time difference
 
 #h_distance <- 300000
 #h_date <- 6000
@@ -41,7 +41,7 @@ kernel <- function(dist_h, h) {
 # Calculate temperature predictions using sum of three Gaussian kernels and multiply the kernels
 for (i in seq_along(times)) {
   # Calculate distances
-  dist_lat_lon <- distHaversine(matrix(c(a, b), nrow = 1), matrix(c(st$latitude, st$longitude), nrow = nrow(st)))
+  dist_lat_lon <- distHaversine(matrix(c(b, a), nrow = 1), matrix(c(st$longitude, st$latitude), nrow = nrow(st)))
   dist_date <- as.numeric(as.Date(st$date) - date)
   dist_time <- as.numeric((as.POSIXct(st$time, format = "%H:%M:%S") - times[i]) / 60)
 
